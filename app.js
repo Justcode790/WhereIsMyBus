@@ -10,7 +10,12 @@ const Bus = require('./BusModel');
 const Agency = require('./AgencyModel');
 
 const app = express();
-app.use(cors());
+app.use(cors(
+  {
+  origin: "https://whereismybuspi.netlify.app",
+  credentials: true,
+}
+));
 app.use(express.json());
 
 // ===== MongoDB Connection =====
@@ -338,25 +343,34 @@ app.get("/api/live-buses", (req, res) => {
 // --- List all agency-registered buses (from DB)
 app.get('/api/buses', authMiddleware, async (req, res) => {
   try {
-    const buses = await Bus.find({ agencyId: req.agencyId }).lean();
-    // Join route names
-    const routeIds = [...new Set(buses.map(b => String(b.routeId)))];
-    const routes = await Route.find({ _id: { $in: routeIds } }, '_id routeName').lean();
-    const map = new Map(routes.map(r => [String(r._id), r.routeName]));
+    // Populate routeId to get routeName directly
+    const buses = await Bus.find({ agencyId: req.agencyId })
+      .populate('routeId', 'routeName') // only get routeName from Route
+      .lean();
+    
+      console.log(buses);
+
     const result = buses.map(b => ({
-      id: String(b._id),
+      id: b._id.toString(),
       shortId: b.shortId,
       registration: b.registration || '',
-      routeId: String(b.routeId),
-      routeName: map.get(String(b.routeId)) || '',
+      routeId: b.routeId?._id.toString() || '',
+      routeName: b.routeId?.routeName || '-', // safe optional chaining
+      status: b.status || 'Idle',
       createdAt: b.createdAt,
     }));
-    res.json(result);
+
+    {console.log(result)}
+
+
+
+    res.json(buses);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Failed to fetch buses' });
   }
 });
+
 
 // --- Create/assign a bus (Agency)
 app.post('/api/buses', authMiddleware, async (req, res) => {
