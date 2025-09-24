@@ -78,6 +78,7 @@ function hashPassword(password, salt) {
 function createToken(agency) {
   return jwt.sign({ sub: String(agency._id), email: agency.email }, JWT_SECRET, { expiresIn: '7d' });
 }
+
 function authMiddleware(req, res, next) {
   const auth = req.headers.authorization || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
@@ -341,34 +342,95 @@ app.get("/api/live-buses", (req, res) => {
 });
 
 // --- List all agency-registered buses (from DB)
-app.get('/api/buses', authMiddleware, async (req, res) => {
-  try {
-    // Populate routeId to get routeName directly
-    const buses = await Bus.find({ agencyId: req.agencyId })
-      .populate('routeId', 'routeName') // only get routeName from Route
-      .lean();
+// app.get('/api/buses', authMiddleware, async (req, res) => {
+//   try {
+//     // Populate routeId to get routeName directly
+//     const buses = await Bus.find({ agencyId: req.agencyId })
+//       .populate('routeId', 'routeName') // only get routeName from Route
+//       .lean();
     
-      console.log(buses);
+//       console.log(buses);
+
+//     const result = buses.map(b => ({
+//       id: b._id.toString(),
+//       shortId: b.shortId,
+//       registration: b.registration || '',
+//       routeId: b.routeId?._id.toString() || '',
+//       routeName: b.routeId?.routeName || '-', // safe optional chaining
+//       status: b.status || 'Idle',
+//       createdAt: b.createdAt,
+//     }));
+
+//     {console.log(result)}
+
+
+
+//     res.json(buses);
+//   } catch (e) {
+//     console.error(e);
+//     res.status(500).json({ error: 'Failed to fetch buses' });
+//   }
+// });
+
+
+
+app.get('/api/buses', authMiddleware, async (req, res) => {
+
+  try {
+
+
+    const buses = await Bus.find({ agencyId: req.agencyId }).lean();
+
+
+    // Join route names
+
+
+    const routeIds = [...new Set(buses.map(b => String(b.routeId)))];
+
+
+    const routes = await Route.find({ _id: { $in: routeIds } }, '_id routeName').lean();
+
+
+    const map = new Map(routes.map(r => [String(r._id), r.routeName]));
+
+
 
     const result = buses.map(b => ({
-      id: b._id.toString(),
+
+
+      id: String(b._id),
+
       shortId: b.shortId,
+
       registration: b.registration || '',
-      routeId: b.routeId?._id.toString() || '',
-      routeName: b.routeId?.routeName || '-', // safe optional chaining
-      status: b.status || 'Idle',
+
+
+      routeId: String(b.routeId),
+
+
+      routeName: map.get(String(b.routeId)) || '',
+
+
       createdAt: b.createdAt,
+
     }));
 
-    {console.log(result)}
+
+    res.json(result);
 
 
 
-    res.json(buses);
+
+
+
   } catch (e) {
+
     console.error(e);
+
     res.status(500).json({ error: 'Failed to fetch buses' });
+
   }
+
 });
 
 
